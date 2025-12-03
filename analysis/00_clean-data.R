@@ -1,35 +1,45 @@
 library(tidyverse)
+library("tidymodels")
+library(glmnet)
+set.seed(12325)
+temp <- read.csv("data/bpo-2023.csv")
+bpo_data <- drop_na(temp[-c(1:6,8, 9, 11:14, 16:19, 21:23, 25:36,38,39)])
 
-heart_data <- read.csv("rmr_data.csv")
+# split data
 
-### Explortory Analysis ###
+data_split <- initial_validation_split(bpo_data, prop = c(0.7, 0.15))
 
-### Resting heart rate ###
+train_data <- training(data_split)
+test_data <- testing(data_split)
+validation_data <- validation(data_split)
 
-mean(heart_data$Height..cm.)
-sd(heart_data$Height..cm.)
+# stepwise regression
 
-## Resting metabolic rate ###
+intercept_only <- lm(TOTAL.GREENHOUSE.GAS.EMISSIONS..metric.tons.of.CO2e. ~ 1, data = train_data)
+full_model_formula <- formula(lm(TOTAL.GREENHOUSE.GAS.EMISSIONS..metric.tons.of.CO2e. ~ ., train_data))
 
-mean(heart_data$RMR..kcal.day.)
-sd(heart_data$RMR..kcal.day.)
+stepwise_model <- stats::step(intercept_only, scope = full_model_formula)
 
+# ridge regression
 
-## Box plot ###
+Y <- train_data[,5]
+X <- as.matrix(train_data[,-5])
 
+ridge_model <- cv.glmnet(x= X, y= Y, alpha = 0)
+best_lambda_ridge <- ridge_model$lambda.min
+best_lambda_ridge
 
-### BASED on scatter plot there is no correlation between resting Hr and rmr 
-ggplot(heart_data, aes(x = Height..cm., y = RMR..kcal.day.)) +
-  geom_point()
+# lasso regression
 
+lasso_model <- cv.glmnet(x= X,y =Y, alpha = 1)
+best_lambda_lasso <- lasso_model$lambda.min
+best_lambda_lasso
 
-hr_fit <- lm(RMR..kcal.day. ~ Resting_HR..bpm., data = heart_data)
-summary(hr_fit)
+library(tidyverse)
+library(glmnet)
+data(mtcars)
+Y <- (mtcars[, 1]) # mpg
+X <- as.matrix(mtcars[, -1]) # drop mpg
+ridge_res <- cv.glmnet(X, y = Y, alpha = 0) # alpha = 0 for ridge regression
+ridge_res$lambda.min
 
-plot(hr_fit)
-
-heihgt_fit <- lm(RMR..kcal.day. ~ Height..cm., data = heart_data)
-
-summary(heihgt_fit)
-
-plot(heihgt_fit)
