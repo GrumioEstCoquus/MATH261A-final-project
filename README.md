@@ -1,9 +1,9 @@
 # MATH261A-project
-Repository for simple linear regression project for MATH 261A at SJSU.
+Repository for final regression project for MATH 261A at SJSU.
 
 ## Data 
 
-Data used in this project is obtained from [Harvard Datverse](https://dataverse.harvard.edu/), and was collected by James Navalta, who provide the data under the [Open Data Commons Public Domain Dedication and License](https://opendatacommons.org/licenses/pddl/1-0/).
+Data used in this project is obtained from [San Jose CA Open Data Portal](https://data.sanjoseca.gov/dataset/building-performance-ordinance), and is a collection of data from buildings subject to the Energy and Water Building Performance Ordinance. The city of San Jose provided the data under the [Creative Commons CC Zero License](https://opendefinition.org/licenses/cc-zero/).
 
 ## External Resources
 

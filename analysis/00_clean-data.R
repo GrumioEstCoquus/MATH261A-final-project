@@ -3,7 +3,6 @@ library("tidymodels")
 library(glmnet)
 set.seed(1282025)
 temp <- read.csv("data/bpo-2023.csv")
-
 bpo_data_temp <- drop_na(temp[-c(1:6,8, 9, 11:14, 16:19, 21:23, 25:36,38:39)])
 bpo_data <- bpo_data_temp |>
   rename('year_built' = 'YEAR.BUILT', 'floor_area' = 'REPORTED.GROSS.FLOOR.AREA..ft.2.',
@@ -73,7 +72,7 @@ lasso_model <- cv.glmnet(x= X,y =Y, alpha = 1)
 best_lambda_lasso <- lasso_model$lambda.min
 best_lambda_lasso
 coef_lasso <- coef(lasso_model, s = "lambda.min")
-coef_lasso
+coef_lasso[3]
 
 # ROOT MEAN SQUARED ERROR #
 
@@ -121,3 +120,11 @@ predicted <- predict(lasso_model, s = best_lambda_lasso, newx = as.matrix(test_d
 rmse_best_model <- sqrt(mean((as.matrix(test_data[,5]) - predicted)^2))
 
 
+rmse_table <-data.frame(
+  Model = c("a", "b", "c"),
+  rmse = c(1,2,3)
+)
+
+knitr::kable(
+  rmse_table
+)

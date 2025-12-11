@@ -1,12 +1,11 @@
 ---
-title: "Estimation of Resting Metabolic Rate Using Height and Simple Linear Regression"
-subtitle: "Subtitle"
+title: "Predicting Buildings' Greenhouse Gas Emissions Using Building Characteristics, Ultility Usage, and LASSO Regression"
 author: "Joseph Burks"
-thanks: "Project repository available at: [https://github.com/GrumioEstCoquus/MATH261A-project1](https://github.com/GrumioEstCoquus/MATH261A-project1)."
+thanks: "Project repository available at: [https://github.com/GrumioEstCoquus/MATH261A-final-project](https://github.com/GrumioEstCoquus/MATH261A-final-project)."
 date: today
 date-format: long
 abstract: |
-  Resting metabolic rate (RMR) is a measure of the energy the body requires to maintain basic life functions. People can use RMR to better tailor diet and nutrition plans, but obtaining an accurate measurement requires laboratory-based tests. In this report, we developed a predictive equation using data from 95 observations, ranging from 18 to 65 years old. We used simple linear regression with height as the predictor variable: RMR = -2082.267 + 22.075(height) with 𝑅^2 = 0.469. We found height is a moderately accurate predictor of RMR. However, our model explains less of the variation of RMR than more well-established formulas.
+  Climate change is a significant issue today. Several sources influence climate change. One is greenhouse gases like carbon dioxide. Knowing the substantial sources of greenhouse gases can help individuals develop strategies to combat climate change. In this report, we fit a predictive equation using data from 999 observations of buildings subject to the Building Performance Ordinance (BPO) in San Jose, California. We tested several regression models.  We tested several models. The best performing is a LASSO regression model: Greenhouse gas emissions = 125.342 + 0.0005 (FLOOR AREA) - 0.903 (ENERGY STAR SCORE) + 0.0003 (TOTAL ELECTRICTY USE). The model had a RMSE of 3778.5594 on our testing dataset, indicating that the model has strong preditive power.
 format: pdf
 bibliography: references.bib
 number-sections: true
@@ -21,42 +20,51 @@ header-includes:
 #| message: false
 
 library(tidyverse)
-rmr_data <- read.csv("C:/Users/josep/OneDrive/Desktop/Math_261A/Project_1/MATH261A-project1/data/rmr_data.csv")
+library("tidymodels")
+library(glmnet)
+
+raw_bpo_data <- read.csv("C:/Users/josep/OneDrive/Desktop/MATH_261A/MATH261A-final-project/data/bpo-2023.csv")
+
+bpo_data <- drop_na(raw_bpo_data[-c(1:6,8, 9, 11:14, 16:19, 21:23, 25:36,38:39)])
+bpo_data <- bpo_data |>
+  rename('year_built' = 'YEAR.BUILT', 'floor_area' = 'REPORTED.GROSS.FLOOR.AREA..ft.2.',
+         'energy_star' = 'ENERGY.STAR.SCORE', 'tot_electricity' = 'TOTAL.ELECTRICITY.USE..kWh.',
+         'greenhouse_emissions' = 'TOTAL.GREENHOUSE.GAS.EMISSIONS..metric.tons.of.CO2e.',
+         'water_use' = 'TOTAL.WATER.USE..kgal.')
+
+
 ```
 
 # Introduction {#sec-introduction}
 
-Resting metabolic rate (RMR) is the amount of energy the body requires to maintain basic life functions while at rest. In other words, it is the amount of calories one burns at rest. RMR accounts for approximately 60-70% of the total calories burnt daily [@Plaza-Florido_Alcantara_2023]. Knowing one’s RMR can help tailor nutrition and diet plans to an individual's needs.
+Climate Change is a critical issue and has the potential to escalate to a cataclysmic disaster. Greenhouse gases such as carbon dioxide trap heat in the atmosphere, contributing to climate change. There are numerous sources of greenhouse gases. In this report, we examine the emissions from a building’s energy usage. Knowing which buildings contribute the most greenhouse gases can help city planners develop more useful building strategies or better renewable energy initiatives.
 
-Accurately measuring RMR requires laboratory testing using gas analysis. By measuring the oxygen consumed and the carbon dioxide expelled while at rest, one can obtain an accurate estimate of RMR. However, due to cost and accessibility, several formulas have been developed to estimate RMR. The most widely used one is the Mifflin-St Jeor Equation, which uses four predictors: weight, height, age, and sex. The Mifflin-St Jeor equation was obtained using multiple linear regression. Although considered the most accurate formula, it leaves approximately 30% of the variance in RMR unexplained [@MIFFLIN1990241].
+To accurately calculate a building's greenhouse gas emissions, one would need to know the exact sources of the electricity. Several factors can influence the sources of energy, from the location of the building to the time of day. As a result, many places rely on Energy Star, a part of the EPA, to do these calculations. This can be expensive and requires giving data to a third party. This report seeks to develop a predictive model that building owners can use instead.
 
-The report investigates whether height alone is a good predictor of resting metabolic rate. We fit a simple linear regression model, with height as the predictor and resting metabolic rate as the response variable. The fitted model is $\hat{Y} = -2082.267\mbox{ } kcal/day+22.075cm \cdot X$. On average, RMR increases by 22.075 kcal/day for each additional centimeter of height.
+The report aims to accurately predict a building's CO2 emissions with utility usage and building characteristics. We fit several regression models, including multiple linear regression, LASSO regression, and Ridge regression, on a training subset of the data. Then we tested those models on a validation set. Finally, we calculated the Root Mean Squared Error for the best-performing model on a testing set. We obtained the best model with LASSO regression with a lambda of 43.2615. The fitted LASSO model is Greenhouse gas emissions = 125.342 + 0.0005 (FLOOR AREA) - 0.903 (ENERGY STAR SCORE) + 0.0003 (TOTAL ELECTRICTY USE)
 
-The remainder of this report is structured as follows: @sec-data discusses the data, @sec-methods discusses the simple linear regression model, @sec-results discusses the results, and @sec-discussion discusses the findings, weaknesses, and further questions.
+The remainder of this report is structured as follows: @sec-data discusses the data, @sec-methods discusses the regression models we used, @sec-results discusses the results, and @sec-discussion discusses the findings, weaknesses, and further questions.
+
 
 # Data {#sec-data}
 
-The data we used in this report comes from the Harvard Dataverse and was used in the study *Gender-agnostic Inclusive Estimation for Resting Metabolic Rate.* [@DVN/MIOESN_2025]. The dataset contains 95 observations of healthy individuals. Participants' ages range from 18 to 65 years. Sex was not recorded, so it is unknown whether male or female participants were oversampled, but besides that, there are no concerns about the representativeness of the sample. Participants' RMR was measured using indirect calorimetry. Indirect calorimetry is a non-invasive method of measuring the oxygen consumption and carbon dioxide production of an individual. The variables of interest are height and resting metabolic rate. Height is measured in centimeters and has a mean of 168.399 cm and a standard deviation of 10.185 cm. RMR is measured in kcal per day with a mean of 1635.097 kcal/day and a standard deviation of 328.428 kcal/day.
+The data we used in this report comes from the San Jose, CA Open Data Portal [@data-cite]. In 2018, the city of San Jose adopted the Energy and Water Building Performance Ordinance (BPO). The BPO requires nonresidential and multifamily buildings larger than 20000 ft^2 to track their energy and water use with the EPA ENERGY STAR Portfolio Manager. The data contains 999 observations for buildings subject to the BPO in 2023. 
 
-```{r fig-scatter-plot}
-#| echo: false
-#| label: fig-scatter-plot
-#| fig-cap: "Scatter plot of Resting Metabolic Rate (kcal/day) vs. Height (cm)"
+The variables of interest are total greenhouse gas emissions, ENERGY STAR score, year built, surface area, total electricity use, and total water use. Total greenhouse gas emissions is measured in metric tons (C02). ENERGY STAR reports the value based on a building's natural gas use and the electricity coming from nonrenewable sources. It has a mean of `r round(mean(bpo_data$greenhouse_emissions,3))` metric tons of CO2 and a standard deviation of `r round(sd(bpo_data$greenhouse_emissions,3))` metric tons of CO2. ENERGY STAR score ranges from 1 to 100. ENERGY STAR also reports the score based on the building’s energy performance. It is a comparison to similar buildings nationwide; a score of 50 represents median performance. It has a mean `r round(mean(bpo_data$energy_star,3))` and standard deviation `r round(sd(bpo_data$energy_star,3))`. Year built is measured in years. It has a mean `r round(mean(bpo_data$year_built,3))` and standard deviation `r round(sd(bpo_data$year_built,3))`. Area, total electricity use, and total water use are all reported by the building owners or managers. Area is measured in square feet, with mean `r round(mean(bpo_data$floor_area,3))`$\mbox{ft}^2$ and standard deviation `r round(sd(bpo_data$floor_area,3))`$\mbox{ft}^2$. Total electricity is measured in kilowatt-hours, with mean `r round(mean(bpo_data$tot_electricity,3))` kWh and standard deviation `r round(sd(bpo_data$tot_electricity,3))` kWh. Total water use is measured in kilo-gallons, with mean `r round(mean(bpo_data$water_use,3))` kilo-gallons and standard deviation `r round(sd(bpo_data$water_use,3))` kilo-gallons.
 
-ggplot(rmr_data, aes(x = Height..cm., y = RMR..kcal.day.)) +
-  geom_point() +
-  xlab("Height (cm)") +
-  ylab("Resting Metabolic Rate (kcal/day)") +
-  ggtitle("Resting Metabolic Rate vs. Height")
-```
-
-A preliminary scatterplot [@fig-scatter-plot] indicated a strong positive linear relationship between height and RMR, suggesting that linear regression would likely be an appropriate model.
 
 # Methods {#sec-methods}
 
-We used a simple linear regression model in this report. The general model is as follows: $Y_i = \beta_0 + \beta_1X_i +\varepsilon$. $Y_i$ are observed responses. In this case, the observed RMRs. $\beta_0$ is the intercept. It represents the average response value when the predictor is 0. In this case, it contains little meaning, since the predictor variable is strictly positive. $\beta_1$ is the slope of the line of best fit. It represents the average increase in resting metabolic rates for a one-centimeter increase in height. $X_i$ are the observed predictor values. In this case, these are the heights. The $\varepsilon_i$are the error terms and represent the variability in $Y$ not explained by a linear function of $X$.
+We used several regression models in this report. One is multiple linear regression. The general model is as follows: $Y_i = \beta_0 +\beta_1X_{i1} +\beta_2X_{i2}+\dots +\beta_{p-1}X_{i,p-1} +\varepsilon_i$ $Y_i$ are the observed responses. In this case, the total greenhouse gas emissions. $\beta_0$ is the intercept. It represents the average response value when all predictors are zero. In this case, it contains little meaning, since all predictor variables are strictly positive. The other $\beta$s are the slopes corresponding to each predictor variable. The $\beta$s represent the average change in total greenhouse gas emissions for a one-unit change in the corresponding predictor variable while keeping the other predictor variables constant. The $X_i$ are the observation predictor values. In this case, the ENERGY STAR score, year built, surface area, total electricity use, and total water use. The $\varepsilon_i$ are the error terms and represent the variability in $Y$ not explained by a function of $X_i$.
 
-There are several assumptions for simple linear regression. One is that the relationship between the response and predictor must be linear. Meaning, $E[Y_i] = \beta_0 + \beta_1 X_i$ is correct. The others relate to the $\varepsilon_i$. The $\varepsilon_i$ must be independently and identically distributed normal with constant variance ($\varepsilon_i \overset{\mathrm{iid}}{\sim} N(0,\sigma^2$. If the above assumptions are true, we can use hypothesis testing to test the model estimates. The null hypotheses are $\beta_0=0$ and $\beta_1 = 0$. We fit the simple linear regression model using the lm() function in R [@R-cite].
+There are several assumptions for multiple linear regression. One is that the relationship between the response and predictor must be linear. Meaning, $E[Y_i] =  \beta_0 +\beta_1X_{i1} +\beta_2X_{i2}+\dots +\beta_{p-1}X_{i,p-1}$ is correct. The others relate to the $\varepsilon_i$. The $\varepsilon_i$ must be independently and identically distributed normal with constant variance ($\varepsilon_i \overset{\mathrm{iid}}{\sim} N(0,\sigma^2)$.
+
+One model used stepwise regression. Stepwise regression involves fitting simple linear regression models for each potential predictor. For every model, we calculate a test statistic and add the predictor corresponding to the best statistics that exceeds a threshold to the model. This process repeats by adding and removing potential predictors until corresponding to a threshold until no more predictors can be added or removed.
+
+The two models used are regularized regression models. First is Ridge regression. Ridge regression is similar to multiple linear regression but we estimate the parameters by minimizing $\sum\limits^n_{i=1}(Y_i - \beta_0 -\beta_1X_{i1} -\beta_2 X_{i2}-\dots -\beta_{p-1}X_{i,p-1})^2 +\lambda \sum\limits^{p-1}_{j=1}\beta^2_j$ Where $\lambda \geq 0$ controls the level of regularization. We chose the optimal $\lambda$ by minimizing the AIC on the training data set. LASSO regression is very similar to Ridge regression. We estimate the parameters by minimizing $\sum\limits^n_{i=1}(Y_i - \beta_0 -\beta_1X_{i1} -\beta_2 X_{i2}-\dots -\beta_{p-1}X_{i,p-1})^2 +\lambda \sum\limits^{p-1}_{j=1}|\beta_j|$ Where $\lambda \geq 0$ controls the level of regularization. We also chose the optimal $\lambda$ by minimizing the AIC on the training data set.
+
+To avoid overfitting, we split the dataset into training, validation, and test sets. We used the following distribution to split the data: 70% training, 15% validation, and 15% test. We trained the models on the training set. We then calculated the Root Mean Square Error (RMSE) for each model with the validation set. We considered the model with the smallest RMSE on the validation set to be the optimal model. Finally, we computed the RMSE of the optimal model with the test set to measure its predictive power.
+We fit the simple and multiple linear regression models using the lm() function in R [@R-cite]. We fit the LASSO and Ridge models in R with the glmnet package [@regularized-cite].
 
 # Results {#sec-results}
 
@@ -66,64 +74,166 @@ There are several assumptions for simple linear regression. One is that the rela
 #| echo: false
 #| include: false
 
-lm_fit <- lm(RMR..kcal.day. ~ Height..cm., data = rmr_data)
+set.seed(1282025)
+data_split <- initial_validation_split(bpo_data, prop = c(0.7, 0.15))
+
+train_data <- training(data_split)
+test_data <- testing(data_split)
+validation_data <- validation(data_split)
+
+# water only
+water_only <- lm(greenhouse_emissions ~ water_use, data = train_data)
+
+# stepwize model
+
+intercept_only <- lm(greenhouse_emissions ~ 1, data = train_data)
+full_model_formula <- formula(lm(greenhouse_emissions ~ ., train_data))
+
+stepwise_model <- stats::step(intercept_only, scope = full_model_formula)
+
+
+
+# energy use only
+
+energy_only <- lm(greenhouse_emissions ~ tot_electricity, data = train_data)
+
+# area only 
+
+area_model <- lm(greenhouse_emissions ~ floor_area, data = train_data)
+
+
+# full model
+
+full_model <- lm(greenhouse_emissions ~ ., train_data)
+
+# ridge regression
+
+Y <- as.matrix(train_data[,5])
+X <- as.matrix(train_data[,-5])
+
+ridge_model <- cv.glmnet(x= X, y = Y, alpha = 0)
+best_lambda_ridge <- ridge_model$lambda.min
+
+
+coef_ridge <- coef(ridge_model, s ="lambda.min")
+# lasso regression
+
+lasso_model <- cv.glmnet(x= X,y =Y, alpha = 1)
+
+best_lambda_lasso <- lasso_model$lambda.min
+coef_lasso <- coef(lasso_model, s = "lambda.min")
+
+
+# ROOT MEAN SQUARED ERROR #
+
+# water only
+
+predicted <- predict(water_only, newdata = validation_data)
+rmse_water <- sqrt(mean((validation_data$greenhouse_emissions - predicted)^2))
+
+# electricity only
+
+predicted <- predict(energy_only, newdata = validation_data)
+rmse_electricty <- sqrt(mean((validation_data$greenhouse_emissions - predicted)^2))
+
+# area only
+
+predicted <- predict(area_model, newdata = validation_data)
+rmse_area <- sqrt(mean((validation_data$greenhouse_emissions - predicted)^2))
+
+# stepwise 
+
+predicted <- predict(stepwise_model, newdata = validation_data)
+rmse_step <- sqrt(mean((validation_data$greenhouse_emissions - predicted)^2))
+
+# full model
+
+predicted <- predict(full_model, newdata = validation_data)
+rmse_full <- sqrt(mean((validation_data$greenhouse_emissions - predicted)^2))
+
+# ridge regression
+
+predicted <- predict(ridge_model, s = best_lambda_ridge, newx = as.matrix(validation_data[,-5]))
+rmse_ridge <- sqrt(mean((as.matrix(validation_data[,5]) - predicted)^2))
+
+# Lasso regression
+
+predicted <- predict(lasso_model, s = best_lambda_lasso, newx = as.matrix(validation_data[,-5]))
+rmse_lasso <- sqrt(mean((as.matrix(validation_data[,5]) - predicted)^2))
+
+
+best_lambda_lasso <- lasso_model$lambda.min
+coef_lasso <- coef(lasso_model, s = "lambda.min")
+
+predicted <- predict(lasso_model, s = best_lambda_lasso, newx = as.matrix(test_data[,-5]))
+rmse_best_model <- sqrt(mean((as.matrix(test_data[,5]) - predicted)^2))
+
 ```
 
-The fitted model is: $\hat{Y}_i$ = `r round(coefficients(lm_fit)[1],3)`+`r round(coefficients(lm_fit)[2],3)` $X_i$
+In total we fit seven models. Three simple linear regression models, with predictors total water usage, total electricity usage, and floor area. One model is a multiple linear regression model that used all predictors. One model was obtained with stepwise regression. One model is a LASSO regression model. The last model is a Ridge regression model. [@fig-rmse-table] shows the models corresponding RMSE on the validation dataset. The LASSO regression had the smallest RMSE (`r round(rmse_lasso,4)`). The Ridge regression, multiple linear regression, stepwise regression models all had similar RMSE and close to the LASSO regression model. The simple linear regression models with water only and floor area only had much larger RMSE, over 3 times as large as the LASSO regression RMSE. Based on the RMSE the LASSO model is the optimal model for our data.
 
-The estimated intercept parameter is $b_0=$ `r round(coefficients(lm_fit)[1],3)`. This represents the average RMR for a person with a height of 0cm. Since height is strictly positive, the intercept does not contain much meaning.
-
-The estimated slope parameter is $b_1=$ `r round(coefficients(lm_fit)[2],3)`. This means that for each one centimeter increase in height, the resting metabolic rate increases on average by `r round(coefficients(lm_fit)[2],3)`.
-
-This simple linear regression has an R-squared of `r round(summary(lm_fit)$r.squared, 3)`. This means the model explains around `r round(summary(lm_fit)$r.squared, 3) * 100`% of the variation of RMR.
-
-To test the assumptions of linearity, constant variance, and independence, we plot the residuals ($\hat{Y_i} - Y_i$) vs the fitted values ([@fig-rmr-residual]).
-
-```{r fig-rmr-residual}
+```{r fig-rmse_table}
 #| echo: false
 #| warning: false
 #| message: false
-#| label: fig-rmr-residual
-#| fig-cap: "Residuals (y-axis) vs fitted values (x-axis) for a simple linear regression model with resting metabolic rate (kcal/day) as the response and height (cm) as the predictor"
+#| label: fig-rmse-table
+#| fig-cap: "Table of all the models tested with their corresponding RMSE on the validation dataset"
 
-plot_data <- data.frame(resid = resid(lm_fit),
-                       fitted = fitted(lm_fit))
 
-ggplot(plot_data, aes(x = fitted, y =resid)) +
-  geom_point() +
-  geom_hline(yintercept = 0, linetype = "dashed", col="red") +
-  ylab("Residuals")+
-  xlab("Fitted value") +
-  ggtitle("Residuals vs. Fitted Value")
+rmse_table <-data.frame(
+  Model = c("LASSO", "Ridge", "Floor Area Only", "Electricty Only", "Stepwise", "All Predictors", "Water Only"),
+  RMSE = c(rmse_lasso, rmse_ridge, rmse_area, rmse_electricty, rmse_step, rmse_full, rmse_water)
+)
+rmse_table <- rmse_table[order(rmse_table$RMSE), ]
+
+knitr::kable(
+  rmse_table, row.names =FALSE, caption = "Models and Corresponding Validation RMSE"
+)
 ```
 
-[@fig-rmr-residual] shows the residuals evenly distributed vertically, with no clear patterns and no systematic change in variance. While there are a few oddities with extreme points, these are likely due to a lack of data rather than assumption violations. Based on [@fig-rmr-residual], the assumptions of independence, constant variance, and linearity seem satisfied.
+The fitted LASSO model is: $\hat{Y}_i$ = `r round(coef_lasso[1],3)` + `r round(coef_lasso[3],4)` (FLOOR AREA) - `r (-1)*round(coef_lasso[4],3)` (ENERGY STAR SCORE) + `r round(coef_lasso[5],4)` (TOTAL ELECTRICTY USE)
 
-To test the assumption of normality, we graph a Quantile-Quantile plot, the sample quantiles vs the theoretical normal quantiles ([@fig-qq-plot]). If the data is normal, the points on the Quantile-Quantile plot will lie on a straight line.
+The estimated intercept parameter is $b_0=$ `r round(coef_lasso[1],3)`. This represents the average greenhouse emissions for a building whose floor area is 0, ENERGY STAR score is 0, and electricity use is 0. Since all of these predictors are strictly positive, the intercept does not contain much meaning.
 
-```{r fig-qq-plot}
+The estimated slope parameter for floor area is $b_1=$ `r round(coef_lasso[3],4)`. This means that for each square-foot increase in floor area while keeping the other predictors constant, the building's greenhouse gas emissions will increase on average by `r round(coef_lasso[3],4)` metric tons of CO2.
+
+The estimated slope parameter for ENERGY STAR score is $b_2=$ `r round(coef_lasso[4],4)`. This means that for each one point increase in ENERGY STAR score while keeping the other predictors constant, the building's greenhouse gas emissions will decrease on average by `r -round(coef_lasso[4],4)` metric tons of CO2.
+
+The estimated slope parameter for total electricity use is $b_3=$ `r round(coef_lasso[5],4)`. This means that for each kWh increase in electricity while keeping the other predictors constant, the building's greenhouse gas emissions will increase on average by `r round(coef_lasso[5],4)` metric tons of CO2.
+
+This LASSO regression model has an RMSE on the testing dataset of `r round(rmse_best_model, 3)`. This is relatively small in comparison to the observed greenhouse gas emissions in this. This means that the fitted LASSO model has strong predictive power.
+
+
+
+```{r fig-actual-pred}
 #| echo: false
 #| warning: false
 #| message: false
-#| label: fig-qq-plot
-#| fig-cap: "Plot of quantiles of residuals vs the theoritical normal distribution quantiles"
+#| label: fig-actual-vs-pred
+#| fig-cap: "Plot of the predicted buildings' greenhouse gas emissions vs actual buildings' greenhouse gas emissions from the test data set"
 
-ggplot(rmr_data, aes(sample = RMR..kcal.day.)) +
-  stat_qq() +
-  stat_qq_line(colour="grey") +
-  ggtitle("Normal Quantile-Quantile Plot")
+real <- test_data$greenhouse_emissions
+predictions <- c(predict(lasso_model, s = best_lambda_lasso, newx = as.matrix(test_data[,-5])))
+real_vs_pred <- data.frame(real, predictions)
+
+ggplot(real_vs_pred, aes(x = real, y = predictions)) +
+  geom_point(col = "blue", shape =1) +
+  geom_abline() +
+  ylab("Predicted Emissions (Metric tons of CO2)") +
+  xlab("Actual Emissions (Metric tons of Co2)") +
+  ggtitle("Predicted Emissions vs. Actual Emissions")
+  
 ```
 
-[@fig-qq-plot] shows very little deviations from the straight line, indicating that the assumption of normality of the error terms is also satisfied.
-
-Because the data satisfy the assumptions, we can use hypothesis testing to check the model fit. We conducted a two-sided t-test with null hypothesis $\beta_1=0$ and alternative hypothesis $\beta_1\neq0$. The associated p-value for $\beta_1$ is `r summary(lm_fit)$coefficients[2,4]` which is much smaller than the classical significance of $\alpha = 0.05$. Hence, we reject the null hypothesis. There is evidence to suggest that $\beta_1\neq 0$.
+[@fig-actual-vs-pred] Shows the LASSO regressions predictions for buildings' greenhouse gas emission vs the actual greenhouse gas emissions based on the testing dataset. If the LASSO model were perfectly accurate, all points would lie along the $y=x$. Besides a couple extreme points, most of the points lie close to the line. This indicates that the LASSO model does a good job predicting buildings' greenhouse gas emissions.
 
 # Discussion {#sec-discussion}
 
-The simple linear regression model indicates that height is a moderately strong predictor of RMR, explaining nearly half of its variation $R^2 =$ `r round(summary(lm_fit)$r.squared, 3)`. Moreover, the result of the hypothesis test indicates that the estimated slope is statistically significant. However, while height alone is a decent predictor, it leaves a lot of variation unexplained. The Mifflin-St Jeor Equation, which includes height, weight, age, and gender, is more accurate and likely better.
+The LASSO regression model has decent predictive power. The RMSE on the test dataset is less than the standard deviation and relatively small in comparison to the range of total greenhouse gas emissions. Hence, the model can be used to make accurate predictions of buildings' greenhouse gas emissions with total electricity use, ENERGY Star score, and area.
 
-Height may also be a proxy for weight. Taller people will weigh more than shorter people, on average. Future research could test whether weight provides a stronger relationship or use BMI as a way to standardize height and weight.
+While the LASSO model may have good predictive power, the data's scope is limited. The data are from buildings in San Jose subject to the BPO. The model may not be accurate for buildings not subject to the BPO and in different cities. Moreover, there is no guarantee that the trends identified with the LASSO model will continue in the future. 
 
-A valuable next step would be fitting a multiple linear regression using additional body composition variables as predictors, and could explore if it is necessary for men and women to have separate equations, as in the Mifflin-St Jeor Equation.
+The scope of this report is limited to developing a predictive model. We did not perform any inference on the estimated parameters. A valuable next step would be running an experiment on another dataset to see if the predictors floor area, ENERGY STAR score, and electricity use are statistically significant.
+
 
 # References
